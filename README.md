@@ -9,7 +9,6 @@ this may vary for different systems. i'm using ubuntu and these were all the add
     
 - libprotoc-dev
 - [libprotobuf-c](https://github.com/protobuf-c/protobuf-c) 
-- libpthread
 - libmicrohttpd
 
 **2. running**

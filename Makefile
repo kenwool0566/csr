@@ -52,7 +52,7 @@ GAME_SRCS = \
 
 GAME_OBJS = $(patsubst $(SRC_DIR)/%, $(OBJ_DIR)/%, $(GAME_SRCS:.c=.o))
 GAME_OUT = $(OUT_DIR)/gameserver
-GAME_LIBS = -lprotobuf-c -lpthread
+GAME_LIBS = -lprotobuf-c
 
 all: $(GAME_OUT) $(HTTP_OUT)
 
