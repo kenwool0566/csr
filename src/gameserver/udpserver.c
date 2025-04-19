@@ -10,16 +10,16 @@
 
 #define BUFFER_SIZE 1024
 
-void print_hex_buffer(uint8_t *buffer, size_t length) {
-    printf("[");
-    for (size_t i = 0; i < length; ++i) {
-        printf("0x%X", buffer[i]);
-        if (i < length - 1) {
-            printf(", ");
-        }
-    }
-    printf("]\n");
-}
+// void print_hex_buffer(uint8_t *buffer, size_t length) {
+//     printf("[");
+//     for (size_t i = 0; i < length; ++i) {
+//         printf("0x%X", buffer[i]);
+//         if (i < length - 1) {
+//             printf(", ");
+//         }
+//     }
+//     printf("]\n");
+// }
 
 int start_udp_server(const char *host, uint16_t port) {
     int sockfd;
@@ -61,8 +61,8 @@ int start_udp_server(const char *host, uint16_t port) {
             break;
         }
         
-        printf("received from %s:%d: ", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
-        print_hex_buffer(buffer, n);
+        // printf("received from %s:%d: ", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+        // print_hex_buffer(buffer, n);
 
         if (n == 20) {
             process_net_operation(buffer, &client_addr, sockfd);

@@ -2,20 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include "gameserver/session.h"
 #include "gameserver/ikcp.h"
 #include "gameserver/packet.h"
 #include "gameserver/uthash.h"
-#include "gameserver/session.h"
 #include "gameserver/util.h"
 #include "gameserver/handler.h"
-
-typedef struct {
-    struct sockaddr_in addr;
-    int sockfd;
-    uint32_t conv_id;
-    uint32_t token;
-    ikcpcb *kcp;
-} Session;
+#include "shared/cassie.pb-c.h"
 
 typedef struct {
     uint32_t conv_id;
@@ -162,7 +155,9 @@ void process_net_operation(const uint8_t *data, const struct sockaddr_in *client
     if (op.head == 0xFF && op.tail == 0xFFFFFFFF) {
         establish_session(op.data, client_addr, sockfd);
     } else if (op.head == 0x194 && op.tail == 0x19419494) {
-        drop_session(op.conv_id, op.token, client_addr);
+        // this is never reached for some reason so we'll drop in the logout cmd instead
+        // drop_session(op.conv_id, op.token, client_addr);
+        printf("this message should never appear i suppose!");
     } else {
         fprintf(stderr, "unknown magic pair: 0x%X <-> 0x%X\n", op.head, op.tail);
     }
@@ -177,6 +172,18 @@ void kcp_send_flush_update(ikcpcb *kcp, const char *data, int len) {
 
     ikcp_flush(kcp);
     ikcp_update(kcp, time_ms_u32());
+}
+
+void send_packet(Session *sess, uint32_t cmd_id, ProtobufCMessage *msg) {
+    if (!sess || !sess->kcp || !msg) return;
+
+    size_t len = 0;
+    uint8_t *data = encode_packet(cmd_id, msg, &len);
+    if (!data) return;
+
+    kcp_send_flush_update(sess->kcp, (char *)data, (int)len);
+    free(data);
+    printf("sent cmd: %u\n", cmd_id);
 }
 
 void process_kcp_payload(const uint8_t *data, ssize_t len, const struct sockaddr_in *client_addr, int sockfd) {
@@ -196,7 +203,7 @@ void process_kcp_payload(const uint8_t *data, ssize_t len, const struct sockaddr
     int input_result = ikcp_input(kcp, (const char *)data, len);
 
     if (input_result < 0) {
-        fprintf(stderr, "ikcp_input failed for conv=%u\n", conv_id);
+        fprintf(stderr, "ikcp_input failed for conv=%u\ninput len was: %lu\n", conv_id, len);
         return;
     }
 
@@ -207,20 +214,17 @@ void process_kcp_payload(const uint8_t *data, ssize_t len, const struct sockaddr
     
     while ((recv_len = ikcp_recv(kcp, buffer, sizeof(buffer))) > 0) {
         printf("kcp received from conv=%u with len %d\n", conv_id, recv_len);
-
+    
         DecodedPacket pkt = decode_packet(buffer, recv_len);
         if (!pkt.valid) continue;
-
-        size_t packet_len = 0;
-        uint8_t *encoded = dispatch_command(&pkt, &packet_len);
-
-        if (encoded) {
-            printf("handled cmd: %u\n", pkt.cmd_id);
-            kcp_send_flush_update(kcp, (char *)encoded, (int)packet_len);
-            free(encoded);
-        } else {
-            printf("unhandled: %u\n", pkt.cmd_id);
+    
+        if (pkt.cmd_id == CMD_PLAYER_TYPE__CmdPlayerLogoutCsReq) {
+            printf("player with conv_id %u logged out\n", conv_id);
+            drop_session(conv_id, sess->token, client_addr);
+            break;
         }
+    
+        dispatch_command(sess, &pkt);
     }
 
     ikcp_update(kcp, time_ms_u32());

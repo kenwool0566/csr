@@ -3,7 +3,8 @@
 
 #include <stdint.h>
 #include "gameserver/packet.h"
+#include "gameserver/session.h"
 
-uint8_t *dispatch_command(const DecodedPacket *pkt, size_t *out_len);
+void dispatch_command(Session *sess, const DecodedPacket *pkt);
 
 #endif // GS_HANDLER_H
