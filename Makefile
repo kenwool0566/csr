@@ -36,8 +36,7 @@ HTTP_OBJS = $(patsubst $(SRC_DIR)/%, $(OBJ_DIR)/%, $(HTTP_SRCS:.c=.o))
 HTTP_OUT = $(OUT_DIR)/httpserver
 HTTP_LIBS = -lmicrohttpd -lprotobuf-c
 
-GAME_HANDLER_DIR = $(wildcard $(GAME_DIR)/handler/*)
-GAME_HANDLER_SRCS = $(wildcard $(GAME_HANDLER_DIR)/*.c)
+GAME_HANDLER_SRCS = $(shell find $(GAME_DIR)/cmd -type f -name '*.c')
 
 GAME_SRCS = \
 	$(GAME_DIR)/handler.c \
@@ -45,7 +44,6 @@ GAME_SRCS = \
 	$(GAME_DIR)/main.c \
 	$(GAME_DIR)/packet.c \
 	$(GAME_DIR)/session.c \
-	$(GAME_DIR)/udpserver.c \
 	$(GAME_DIR)/util.c \
 	$(SHARED_DIR)/cassie.pb-c.c \
 	$(GAME_HANDLER_SRCS)

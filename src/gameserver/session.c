@@ -5,9 +5,9 @@
 #include "gameserver/session.h"
 #include "gameserver/ikcp.h"
 #include "gameserver/packet.h"
-#include "gameserver/uthash.h"
 #include "gameserver/util.h"
 #include "gameserver/handler.h"
+#include "shared/uthash.h"
 #include "shared/cassie.pb-c.h"
 
 typedef struct {
@@ -49,7 +49,7 @@ int kcp_output_callback(const char *buf, int len, ikcpcb *kcp, void *user) {
     );
 
     if (sent < 0) {
-        perror("sendto failed");
+        fprintf(stderr, "sendto failed\n");
         return -1;
     }
 
@@ -99,7 +99,7 @@ void establish_session(uint32_t data, const struct sockaddr_in *client_addr, int
     uint8_t *buffer = netop_to_bytes(&net_op);
 
     if (buffer == NULL) {
-        fprintf(stderr, "failed converting netop to bytes\n");
+        fprintf(stderr, "netop to bytes failed\n");
         return;
     }
 
@@ -113,41 +113,52 @@ void establish_session(uint32_t data, const struct sockaddr_in *client_addr, int
     );
 
     if (sent < 0) {
-        perror("sendto failed");
+        fprintf(
+            stderr, "establish session(%u) for %s:%d failed\n",
+            conv_id,
+            inet_ntoa(client_addr->sin_addr),
+            ntohs(client_addr->sin_port)
+        );
     } else {
-        printf("sent netop to %s:%d\n", inet_ntoa(client_addr->sin_addr), ntohs(client_addr->sin_port));
+        printf(
+            "new session(%u), %s:%d\n",
+            conv_id,
+            inet_ntoa(client_addr->sin_addr),
+            ntohs(client_addr->sin_port)
+        );
     }
 
     free(buffer);
 }
 
-void drop_session(uint32_t conv_id, uint32_t token, const struct sockaddr_in *client_addr) {
-    Session *sess = get_session_entry(conv_id);
-    if (!sess) {
-        fprintf(stderr, "no session found for conv=%u\n", conv_id);
-        return;
-    }
+// void drop_session(uint32_t conv_id, uint32_t token, const struct sockaddr_in *client_addr) {
+//     Session *sess = get_session_entry(conv_id);
 
-    if (sess->token != token) {
-        fprintf(stderr,
-            "token mismatch for conv=%u from %s:%d (expected: 0x%X, got: 0x%X)\n",
-            conv_id,
-            inet_ntoa(client_addr->sin_addr),
-            ntohs(client_addr->sin_port),
-            sess->token,
-            token
-        );
-        return;
-    }
+//     if (!sess) {
+//         fprintf(stderr, "no session found for conv=%u\n", conv_id);
+//         return;
+//     }
 
-    printf("dropping session conv=%u from %s:%d\n",
-        conv_id,
-        inet_ntoa(sess->addr.sin_addr),
-        ntohs(sess->addr.sin_port)
-    );
+//     if (sess->token != token) {
+//         fprintf(stderr,
+//             "token mismatch for conv=%u from %s:%d (expected: 0x%X, got: 0x%X)\n",
+//             conv_id,
+//             inet_ntoa(client_addr->sin_addr),
+//             ntohs(client_addr->sin_port),
+//             sess->token,
+//             token
+//         );
+//         return;
+//     }
 
-    drop_session_entry(conv_id);
-}
+//     printf("dropping session conv=%u from %s:%d\n",
+//         conv_id,
+//         inet_ntoa(sess->addr.sin_addr),
+//         ntohs(sess->addr.sin_port)
+//     );
+
+//     drop_session_entry(conv_id);
+// }
 
 void process_net_operation(const uint8_t *data, const struct sockaddr_in *client_addr, int sockfd) {
     NetOperation op = netop_from_bytes(data);
@@ -164,14 +175,14 @@ void process_net_operation(const uint8_t *data, const struct sockaddr_in *client
 }
 
 void kcp_send_flush_update(ikcpcb *kcp, const char *data, int len) {
-    int send_result = ikcp_send(kcp, data, len);
-    if (send_result < 0) {
-        fprintf(stderr, "ikcp_send failed\n");
+    int sent = ikcp_send(kcp, data, len);
+    if (sent < 0) {
+        fprintf(stderr, "kcp send failed\n");
         return;
     }
 
     ikcp_flush(kcp);
-    ikcp_update(kcp, time_ms_u32());
+    ikcp_update(kcp, (uint32_t)time_ms_u64());
 }
 
 void send_packet(Session *sess, uint32_t cmd_id, ProtobufCMessage *msg) {
@@ -191,10 +202,12 @@ void process_kcp_payload(const uint8_t *data, ssize_t len, const struct sockaddr
     Session *sess = get_session_entry(conv_id);
     
     if (!sess) {
-        fprintf(stderr, "recv'd kcp payload for unknown conv_id=%u from %s:%d\n",
+        fprintf(
+            stderr, "got kcp with unk conv_id %u from %s:%d\n",
             conv_id,
             inet_ntoa(client_addr->sin_addr),
-            ntohs(client_addr->sin_port));
+            ntohs(client_addr->sin_port)
+        );
         return;
     }
 
@@ -203,30 +216,30 @@ void process_kcp_payload(const uint8_t *data, ssize_t len, const struct sockaddr
     int input_result = ikcp_input(kcp, (const char *)data, len);
 
     if (input_result < 0) {
-        fprintf(stderr, "ikcp_input failed for conv=%u\ninput len was: %lu\n", conv_id, len);
+        fprintf(stderr, "kcp input len %lu failed for session(%u)\n", len,conv_id);
         return;
     }
 
-    ikcp_update(kcp, time_ms_u32());
+    ikcp_update(kcp, (uint32_t)time_ms_u64());
 
     char buffer[1024];
     int recv_len;
     
     while ((recv_len = ikcp_recv(kcp, buffer, sizeof(buffer))) > 0) {
-        printf("kcp received from conv=%u with len %d\n", conv_id, recv_len);
-    
+        // printf("kcp received from session(%u) with len %d\n", conv_id, recv_len);
         DecodedPacket pkt = decode_packet(buffer, recv_len);
         if (!pkt.valid) continue;
     
         if (pkt.cmd_id == CMD_PLAYER_TYPE__CmdPlayerLogoutCsReq) {
-            printf("player with conv_id %u logged out\n", conv_id);
-            drop_session(conv_id, sess->token, client_addr);
+            printf("session(%u) logged out\n", conv_id);
+            drop_session_entry(conv_id);
+            printf("dropped session(%u)\n", conv_id);
             break;
         }
-    
+        
+        printf("got cmd: %u\n", pkt.cmd_id);
         dispatch_command(sess, &pkt);
     }
 
-    ikcp_update(kcp, time_ms_u32());
+    ikcp_update(kcp, (uint32_t)time_ms_u64());
 }
-

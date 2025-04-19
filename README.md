@@ -31,5 +31,5 @@ you can find server config & hotfix config in `./include/shared/config.h`
 if you're using linux and understands the C ecosystem, you know how already. if you don't then look up dawn winery discord.
 
 ## todos:
-1. modularize handlers
+1. find out why player gets stuck for a bit at start
 2. make code better idk lmao
